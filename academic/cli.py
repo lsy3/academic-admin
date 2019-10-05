@@ -59,6 +59,7 @@ def main():
     parser_a.add_argument("--featured", action='store_true', help='Flag publications as featured')
     parser_a.add_argument("--overwrite", action='store_true', help='Overwrite existing publications')
     parser_a.add_argument("--normalize", action='store_true', help='Normalize each keyword to lowercase with uppercase first letter')
+    parser_a.add_argument("--author", required=False, type=str, default='', help='Indicate author name and bolden')
 
     args, unknown = parser.parse_known_args()
 
@@ -77,10 +78,10 @@ def main():
     elif args.command and args.assets:
         import_assets()
     elif args.command and args.bibtex:
-        import_bibtex(args.bibtex, pub_dir=args.publication_dir, featured=args.featured, overwrite=args.overwrite, normalize=args.normalize)
+        import_bibtex(args.bibtex, pub_dir=args.publication_dir, featured=args.featured, overwrite=args.overwrite, normalize=args.normalize, author=args.author)
 
 
-def import_bibtex(bibtex, pub_dir='publication', featured=False, overwrite=False, normalize=False):
+def import_bibtex(bibtex, pub_dir='publication', featured=False, overwrite=False, normalize=False, author=''):
     """Import publications from BibTeX file"""
 
     # Check BibTeX file exists.
@@ -95,16 +96,17 @@ def import_bibtex(bibtex, pub_dir='publication', featured=False, overwrite=False
         parser.ignore_nonstandard_types = False
         bib_database = bibtexparser.load(bibtex_file, parser=parser)
         for entry in bib_database.entries:
-            parse_bibtex_entry(entry, pub_dir=pub_dir, featured=featured, overwrite=overwrite, normalize=normalize)
+            parse_bibtex_entry(entry, pub_dir=pub_dir, featured=featured, overwrite=overwrite, normalize=normalize, author=author)
 
 
-def parse_bibtex_entry(entry, pub_dir='publication', featured=False, overwrite=False, normalize=False):
+def parse_bibtex_entry(entry, pub_dir='publication', featured=False, overwrite=False, normalize=False, author=''):
     """Parse a bibtex entry and generate corresponding publication bundle"""
     print(f"Parsing entry {entry['ID']}")
 
     bundle_path = f"content/{pub_dir}/{slugify(entry['ID'])}"
     markdown_path = os.path.join(bundle_path, 'index.md')
-    cite_path = os.path.join(bundle_path, 'cite.bib')
+    # cite_path = os.path.join(bundle_path, f"{slugify(entry['ID'])}.bib")
+    cite_path = os.path.join(bundle_path, f'cite.bib')
     date = datetime.utcnow()
     timestamp = date.isoformat('T') + 'Z'  # RFC 3339 timestamp.
 
@@ -141,7 +143,8 @@ def parse_bibtex_entry(entry, pub_dir='publication', featured=False, overwrite=F
     elif 'editor' in entry:
         authors = entry['editor']
     if authors:
-        authors = clean_bibtex_authors([i.strip() for i in authors.replace('\n', ' ').split(' and ')])
+        authors = clean_bibtex_authors([i.strip() for i in authors.replace('\n', ' ').split(' and ')], 
+                                       author=author)
         frontmatter.append(f"authors: [{', '.join(authors)}]")
 
     frontmatter.append(f'publication_types: ["{PUB_TYPES.get(entry["ENTRYTYPE"], 0)}"]')
@@ -158,8 +161,6 @@ def parse_bibtex_entry(entry, pub_dir='publication', featured=False, overwrite=F
         frontmatter.append(f'publication: "*{clean_bibtex_str(entry["booktitle"])}*"')
     elif 'journal' in entry:
         frontmatter.append(f'publication: "*{clean_bibtex_str(entry["journal"])}*"')
-    elif 'publisher' in entry:
-        frontmatter.append(f'publication: "*{clean_bibtex_str(entry["publisher"])}*"')
     else:
         frontmatter.append('publication: ""')
 
@@ -201,7 +202,7 @@ def slugify(s, lower=True):
     return s
 
 
-def clean_bibtex_authors(author_str):
+def clean_bibtex_authors(author_str, author=''):
     """Convert author names to `firstname(s) lastname` format."""
     authors = []
     for s in author_str:
@@ -221,7 +222,11 @@ def clean_bibtex_authors(author_str):
         for item in first_names:
             if item in ['ben', 'van', 'der', 'de', 'la', 'le']:
                 last_name = first_names.pop() + ' ' + last_name
-        authors.append(f'"{" ".join(first_names)} {last_name}"')
+        buf = f'{" ".join(first_names)} {last_name}'
+        if buf == author: 
+            buf = f'**{buf}**'
+        # authors.append(f'"{" ".join(first_names)} {last_name}"')
+        authors.append(f'"{buf}"')
     return authors
 
 
